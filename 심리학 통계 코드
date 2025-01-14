@@ -1,0 +1,119 @@
+ # 필요한 패키지 로드
+> library(ggplot2)
+> 
+> # 1단계: 부정정서가 반추에 미치는 영향 (사회적 지지 고려하지 않음)
+> model_1 <- lm(Rumination ~ Negative_Affect, data = data)
+> summary(model_1)
+
+Call:
+lm(formula = Rumination ~ Negative_Affect, data = data)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1.9073 -0.6835 -0.0875  0.5806  3.2904 
+
+Coefficients:
+                Estimate Std. Error t value Pr(>|t|)
+(Intercept)     -0.10280    0.09755  -1.054    0.295
+Negative_Affect -0.05247    0.10688  -0.491    0.625
+
+Residual standard error: 0.9707 on 98 degrees of freedom
+Multiple R-squared:  0.002453,	Adjusted R-squared:  -0.007726 
+F-statistic: 0.241 on 1 and 98 DF,  p-value: 0.6246
+
+> 
+> # 2단계: 사회적 지지가 반추와 부정정서 간 관계를 조절하는 매개효과
+> data$Rumination_Social_Support <- data$Rumination * data$Social_Support  # 상호작용 항목 생성
+> model_2 <- lm(Rumination ~ Negative_Affect + Social_Support + Rumination_Social_Support, data = data)
+> summary(model_2)
+
+Call:
+lm(formula = Rumination ~ Negative_Affect + Social_Support + 
+    Rumination_Social_Support, data = data)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-1.97366 -0.68596 -0.07586  0.55989  2.88359 
+
+Coefficients:
+                          Estimate Std. Error t value Pr(>|t|)
+(Intercept)               -0.10783    0.09920  -1.087    0.280
+Negative_Affect           -0.06046    0.10944  -0.552    0.582
+Social_Support             0.03737    0.10541   0.355    0.724
+Rumination_Social_Support  0.08427    0.10568   0.797    0.427
+
+Residual standard error: 0.9773 on 96 degrees of freedom
+Multiple R-squared:  0.009607,	Adjusted R-squared:  -0.02134 
+F-statistic: 0.3104 on 3 and 96 DF,  p-value: 0.8178
+
+> 
+> # 3단계: 반추가 인터넷 중독에 미치는 영향
+> model_3 <- lm(Internet_Addiction ~ Rumination, data = data)
+> summary(model_3)
+
+Call:
+lm(formula = Internet_Addiction ~ Rumination, data = data)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-2.4807 -0.7027  0.0482  0.7352  2.6202 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)
+(Intercept) -0.03116    0.10496  -0.297    0.767
+Rumination   0.04709    0.10841   0.434    0.665
+
+Residual standard error: 1.043 on 98 degrees of freedom
+Multiple R-squared:  0.001921,	Adjusted R-squared:  -0.008263 
+F-statistic: 0.1887 on 1 and 98 DF,  p-value: 0.665
+
+> 
+> # 4단계: 인터넷 중독이 비자살적 자해에 미치는 영향
+> model_4 <- lm(Non_Suicidal_Self_Injury ~ Internet_Addiction, data = data)
+> summary(model_4)
+
+Call:
+lm(formula = Non_Suicidal_Self_Injury ~ Internet_Addiction, data = data)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-2.75998 -0.50025  0.04907  0.62295  2.29115 
+
+Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)
+(Intercept)         0.10519    0.09948   1.057    0.293
+Internet_Addiction -0.01834    0.09619  -0.191    0.849
+
+Residual standard error: 0.9942 on 98 degrees of freedom
+Multiple R-squared:  0.0003709,	Adjusted R-squared:  -0.009829 
+F-statistic: 0.03637 on 1 and 98 DF,  p-value: 0.8492
+
+> 
+> # 2단계: 사회적 지지에 따른 반추와 부정정서 간 관계 시각화
+> ggplot(data, aes(x = Negative_Affect, y = Rumination)) +
++     geom_point(aes(color = Social_Support), alpha = 0.5) +  # 데이터 점 추가
++     geom_smooth(method = "lm", se = FALSE, aes(color = Social_Support), linetype = "solid") +  # 회귀선 추가
++     labs(title = "Effect of Negative Affect on Rumination by Social Support",
++          x = "Negative Affect", y = "Rumination", color = "Social Support") +
++     theme_minimal()
+`geom_smooth()` using formula = 'y ~ x'
+경고메시지(들):
+The following aesthetics were dropped during statistical transformation: colour.
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a
+  factor? 
+> 
+> # 3단계: 사회적 지지에 따른 반추가 인터넷 중독에 미치는 영향 시각화
+> ggplot(data, aes(x = Rumination, y = Internet_Addiction)) +
++     geom_point(aes(color = Social_Support), alpha = 0.5) +  # 데이터 점 추가
++     geom_smooth(method = "lm", se = FALSE, aes(color = Social_Support), linetype = "solid") +  # 회귀선 추가
++     labs(title = "Effect of Rumination on Internet Addiction by Social Support",
++          x = "Rumination", y = "Internet Addiction", color = "Social Support") +
++     theme_minimal()
+`geom_smooth()` using formula = 'y ~ x'
+경고메시지(들):
+The following aesthetics were dropped during statistical transformation: colour.
+ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
+ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a
+  factor? 
+> 
