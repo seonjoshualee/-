@@ -1,4 +1,5 @@
- # 필요한 패키지 로드
+정서홍수 모델 R 코드
+# 필요한 패키지 로드
 > library(ggplot2)
 > 
 > # 1단계: 부정정서가 반추에 미치는 영향 (사회적 지지 고려하지 않음)
@@ -116,4 +117,73 @@ The following aesthetics were dropped during statistical transformation: colour.
 ℹ This can happen when ggplot fails to infer the correct grouping structure in the data.
 ℹ Did you forget to specify a `group` aesthetic or to convert a numerical variable into a
   factor? 
-> 
+> ////////////////////////////////////////////////////////////////////////////////////
+GABA/Glx 계산 순서를 알기 위한 임의의 R 코드
+# 임의로 생성한 고불안군과 비불안군 GABA/Glx 비율 데이터
+set.seed(123)  # 결과 재현을 위한 시드 설정
+
+# 고불안군 (예시: 50명의 고불안군)
+high_anxious <- rnorm(50, mean = 0.75, sd = 0.15)  # 평균 0.75, 표준편차 0.15
+
+# 비불안군 (예시: 40명의 비불안군)
+non_anxious <- rnorm(40, mean = 0.53, sd = 0.12)  # 평균 0.53, 표준편차 0.12
+
+# Welch의 두 표본 t-테스트 수행 (var.equal = FALSE)
+t_test_result <- t.test(high_anxious, non_anxious, var.equal = FALSE)
+
+# 결과 출력
+print(t_test_result)
+
+Welch Two Sample t-test
+
+data:  high_anxious and non_anxious
+t = 8.472, df = 87.567, p-value = 5.172e-13
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.1655682 0.2670560
+sample estimates:
+mean of x mean of y 
+0.7551605 0.5388484 
+/////////////////////////////////////////////
+Dorsolateral Prefrontal Cortex에서 고불안군과 비불안군 모두 Amygdalofugal projections-FPl는 neural congruency effect와 정적 상관을 보인다는 계산을 알기 위한 임의의 R 코드
+
+1. 피어슨(선형관계)
+# 예시 데이터 생성
+# 변수 1: Amygdalofugal projections-FPl (예시 데이터)
+set.seed(123)
+amygdalofugal_FPl <- rnorm(90, mean=50, sd=10)
+
+# 변수 2: Neural congruency effect (예시 데이터)
+neural_congruency_effect <- rnorm(90, mean=0, sd=1)
+
+# 상관 분석 (Pearson 상관 분석)
+cor_test <- cor.test(amygdalofugal_FPl, neural_congruency_effect, method="pearson")
+
+# 상관 분석 결과 출력
+print(cor_test)
+
+# 결과에서 상관계수와 p-value를 추출
+correlation_coefficient <- cor_test$estimate
+p_value <- cor_test$p.value
+
+# 출력: 상관계수, p-value
+cat("상관계수:", correlation_coefficient, "\n")
+cat("p-value:", p_value, "\n")
+
+# 해석: 상관분석을 바탕으로 회귀분석을 수행할 수 있음
+/////
+2. 스피어만(비선형, 서열관계. 이 경우에는 해당없음)
+# Spearman 상관 분석
+cor_test_spearman <- cor.test(amygdalofugal_FPl, neural_congruency_effect, method="spearman")
+
+# Spearman 상관 분석 결과 출력
+print(cor_test_spearman)
+
+# 결과에서 상관계수와 p-value 추출
+spearman_correlation_coefficient <- cor_test_spearman$estimate
+spearman_p_value <- cor_test_spearman$p.value
+
+# 출력: Spearman 상관계수, p-value
+cat("Spearman 상관계수:", spearman_correlation_coefficient, "\n")
+cat("p-value:", spearman_p_value, "\n")
+
