@@ -1,0 +1,109 @@
+library(dplyr)
+library(ggplot2)
+library(car)
+library(lavaan)
+library(semPlot)
+library(gridExtra)
+
+set.seed(123)
+n <- 200
+
+# 그룹: 처리군과 통제군을 동일한 수로 할당
+data <- data.frame(
+  group = rep(c("treatment", "control"), each = n / 2),
+  sex = sample(c("Male", "Female"), n, replace = TRUE),
+  age = sample(14:19, n, replace = TRUE),
+  school_grade = sample(1:3, n, replace = TRUE),
+  enrolled_in_highschool = sample(c(1, 0), n, replace = TRUE)
+)
+
+# 사전 점수: 외로움과 사회불안 (예: 평균 50, 표준편차 10)
+data <- data %>% 
+  mutate(
+    loneliness_pre = rnorm(n, mean = 50, sd = 10),
+    social_pre = rnorm(n, mean = 50, sd = 10)
+  )
+
+# 처치 효과 부여:
+# treatment군은 사전 점수 대비 평균 5점 감소, control군은 변화가 없거나 아주 미미한 변화
+data <- data %>% 
+  mutate(
+    loneliness_post = ifelse(group=="treatment",
+                             loneliness_pre - 5 + rnorm(n/2, mean = 0, sd = 3),
+                             loneliness_pre + rnorm(n/2, mean = 0, sd = 3)),
+    social_post = ifelse(group=="treatment",
+                         social_pre - 5 + rnorm(n/2, mean = 0, sd = 3),
+                         social_pre + rnorm(n/2, mean = 0, sd = 3))
+  )
+
+# 계산: 사전-사후 차이(감소량; 양의 값이 클수록 많이 감소한 것으로 해석)
+data <- data %>% 
+  mutate(
+    delta_loneliness = loneliness_pre - loneliness_post,
+    delta_social = social_pre - social_post
+  )
+
+# 가설2를 위한 매개 효과 모의:
+# 외로움 및 사회불안 감소가 커지면(POSI에 부정적 영향) POSI가 낮아지고, POSI가 낮으면 문제적 인터넷 이용이 낮아진다고 가정
+# POSI 생성: delta의 영향을 받도록 (두 감소량의 합이 커질수록 POSI가 낮게)
+data <- data %>% 
+  mutate(
+    POSI = 10 - 0.4*(delta_loneliness + delta_social) + rnorm(n, mean = 0, sd = 1)
+  )
+
+# 문제적 인터넷 이용: POSI에 정(+)의 영향을 받음 (POSI가 높으면 문제적 인터넷 이용도 높음)
+data <- data %>% 
+  mutate(
+    problematic_internet_use = 5 + 0.7 * POSI + rnorm(n, mean = 0, sd = 1)
+  )
+# ANCOVA: 외로움
+ancova_loneliness <- aov(loneliness_post ~ group + loneliness_pre + sex + age + school_grade + enrolled_in_highschool, data = data)
+summary(ancova_loneliness)
+
+# ANCOVA: 사회불안
+ancova_social <- aov(social_post ~ group + social_pre + sex + age + school_grade + enrolled_in_highschool, data = data)
+summary(ancova_social)
+# tidyr 패키지 설치 (설치되지 않았다면)
+install.packages("tidyr")
+
+# tidyr 패키지 로드
+library(tidyr)
+
+# 데이터 변환 코드
+data_long <- data %>% 
+    select(group, loneliness_pre, loneliness_post, social_pre, social_post) %>% 
+    pivot_longer(cols = -group, names_to = "measure", values_to = "score") %>% 
+    mutate(
+        time = ifelse(grepl("pre", measure), "pre", "post"),
+        measure = ifelse(grepl("loneliness", measure), "loneliness", "social_anxiety")
+    )
+
+# 결과 확인
+head(data_long)
+# SEM을 위한 모델 정의
+# 여기서는 미리 계산한 delta_loneliness와 delta_social, POSI, problematic_internet_use 변수를 사용합니다.
+sem_model <- '
+  # 경로 모델
+  POSI ~ a1 * delta_loneliness + a2 * delta_social
+  problematic_internet_use ~ b * POSI
+  
+  # 간접 효과 (예: 외로움 감소의 간접효과: a1*b, 사회불안 감소의 간접효과: a2*b)
+  ind_loneliness := a1 * b
+  ind_social := a2 * b
+  total_indirect := ind_loneliness + ind_social
+'
+
+# SEM 모델 적합 (부트스트랩을 사용하여 간접효과 검정)
+fit_sem <- sem(sem_model, data = data, se = "bootstrap", bootstrap = 5000)
+summary(fit_sem, standardized = TRUE, fit.measures = TRUE)
+
+# SEM 경로 모델 시각화
+semPaths(fit_sem, whatLabels = "std", edge.label.cex = 1.2, layout = "spring", sizeMan = 8, sizeLat = 10, edge.color = "blue")
+# POSI와 문제적 인터넷 이용 간 산점도 + 회귀선
+p3 <- ggplot(data, aes(x = POSI, y = problematic_internet_use, color = group)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "POSI와 문제적 인터넷 이용 간 관계", x = "POSI", y = "문제적 인터넷 이용") +
+  theme_minimal()
+
+print(p3)
