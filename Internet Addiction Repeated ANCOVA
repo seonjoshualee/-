@@ -1,0 +1,85 @@
+# 1. 필요한 패키지 로드
+library(dplyr)
+library(psych)    # 기술통계
+library(car)      # ANCOVA 관련 함수 (Anova 등)
+library(lavaan)   # SEM 분석
+
+# 2. 데이터 시뮬레이션 및 무작위 배정
+set.seed(123)
+n <- 324
+data <- data.frame(
+  id = 1:n,
+  sex = sample(c("M", "F"), n, replace = TRUE),
+  age = sample(14:19, n, replace = TRUE),
+  grade = sample(9:12, n, replace = TRUE),
+  academic_scores = round(rnorm(n, mean = 75, sd = 10), 1)
+)
+
+# 무작위로 ICBT 처치군과 대조군 배정 (0: control, 1: treatment)
+data$treatment <- sample(c(0,1), n, replace = TRUE)
+
+# 3. Pre-test: 사전 검사 점수 (loneliness, social anxiety, POSI, PIU)
+data$loneliness_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
+data$social_anxiety_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
+data$POSI_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
+data$PIU_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
+
+# 4. ICBT treatment: 처치군에만 치료 효과 적용 (treatment group only)
+# 후속 처리를 위해 post-test 점수 생성 (처치 효과 모의)
+data$loneliness_post <- with(data, ifelse(treatment == 1,
+                                            loneliness_pre - rnorm(n, mean = 5, sd = 3),
+                                            loneliness_pre + rnorm(n, mean = 0, sd = 3)))
+data$social_anxiety_post <- with(data, ifelse(treatment == 1,
+                                              social_anxiety_pre - rnorm(n, mean = 5, sd = 3),
+                                              social_anxiety_pre + rnorm(n, mean = 0, sd = 3)))
+data$POSI_post <- with(data, ifelse(treatment == 1,
+                                    POSI_pre - rnorm(n, mean = 5, sd = 3),
+                                    POSI_pre + rnorm(n, mean = 0, sd = 3)))
+data$PIU_post <- with(data, ifelse(treatment == 1,
+                                   PIU_pre - rnorm(n, mean = 5, sd = 3),
+                                   PIU_pre + rnorm(n, mean = 0, sd = 3)))
+
+# 5. Follow-up: 사후 1개월 후 검사 (follow-up 점수)
+# 치료 효과가 유지되는지 확인하기 위한 모의 데이터 (post-test 변화 유지 혹은 약간의 변화)
+data$loneliness_follow <- with(data, loneliness_post + rnorm(n, mean = 0, sd = 2))
+data$social_anxiety_follow <- with(data, social_anxiety_post + rnorm(n, mean = 0, sd = 2))
+data$POSI_follow <- with(data, POSI_post + rnorm(n, mean = 0, sd = 2))
+data$PIU_follow <- with(data, PIU_post + rnorm(n, mean = 0, sd = 2))
+
+# 6. 기술통계: 집단 특성 확인
+desc_stats <- describe(data)
+print(desc_stats)
+
+# 7. ANCOVA 분석
+
+## 7-1. Pre-test ANCOVA: 사전 검사 점수를 통제 후 집단 간 차이 비교
+# (여기서는 사전 검사 점수 자체가 집단 간 차이가 있는지 확인하는 용도)
+ancova_pre <- aov(loneliness_pre ~ treatment + sex + age + grade + academic_scores, data = data)
+summary(ancova_pre)
+
+## 7-2. Post-test ANCOVA: 사전 검사 점수를 보정하여 처치군과 대조군의 사후 점수 비교
+ancova_post <- aov(loneliness_post ~ loneliness_pre + treatment + sex + age + grade + academic_scores, data = data)
+summary(ancova_post)
+
+## 7-3. Follow-up ANCOVA: 사전 및 사후 점수를 보정하여 처치군과 대조군의 후속 검사 점수 비교
+ancova_follow <- aov(loneliness_follow ~ loneliness_pre + loneliness_post + treatment + sex + age + grade + academic_scores, data = data)
+summary(ancova_follow)
+
+# 위와 같이 social_anxiety, POSI, PIU에 대해서도 ANCOVA를 동일한 방식으로 수행할 수 있습니다.
+# 필요에 따라 각 변수별로 모델을 따로 작성하거나, multivariate ANCOVA (MANCOVA)를 고려할 수도 있습니다.
+
+# 8. SEM Mediation Analysis
+# 후속 검사 결과(즉, follow-up)를 기반으로 POSI가 매개역할을 하는지 분석
+# 아래는 예시 모델: loneliness와 social_anxiety가 POSI에 영향을 주고, POSI가 PIU에 영향을 주는 모델
+
+sem_model <- '
+  # 매개 모델: Follow-up 점수 사용
+  POSI_follow ~ a1 * loneliness_follow + a2 * social_anxiety_follow
+  PIU_follow ~ b * POSI_follow + c1 * loneliness_follow + c2 * social_anxiety_follow
+  
+  # 간접효과 정의
+  indirect_loneliness := a1 * b
+  indirect_social_anxiety := a2 * b
+'
+fit_sem <- sem(sem_model, data = data)
+summary(fit_sem, standardized = TRUE, fit.measures = TRUE)
