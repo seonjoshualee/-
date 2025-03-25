@@ -1,0 +1,126 @@
+# --- SETUP ---
+set.seed(123)  # For reproducibility
+library(dplyr)
+library(lavaan)
+
+# Total sample size
+n <- 324
+
+# --- DATA SIMULATION ---
+# Create baseline demographic data
+data <- data.frame(
+  id = 1:n,
+  sex = sample(c("Male", "Female"), n, replace = TRUE),
+  age = sample(14:19, n, replace = TRUE),
+  grade = sample(9:12, n, replace = TRUE),
+  academic_score = rnorm(n, mean = 75, sd = 10)
+)
+
+# Random allocation to groups
+data$group <- sample(c("Treatment", "Control"), n, replace = TRUE)
+
+# Simulate pre-test scores (e.g., scales standardized to a given mean/SD)
+data <- data %>%
+  mutate(
+    loneliness_pre = rnorm(n, mean = 50, sd = 10),
+    social_anxiety_pre = rnorm(n, mean = 40, sd = 8),
+    POSI_pre = rnorm(n, mean = 30, sd = 5),
+    PIU_pre = rnorm(n, mean = 60, sd = 12)
+  )
+
+# --- SIMULATE POST-TEST & FOLLOW-UP SCORES ---
+# For treatment group, assume an effect of ICBT:
+data <- data %>%
+  mutate(
+    # Post-test scores: treatment effect results in decreases in loneliness, social anxiety, and PIU,
+    # with some change in POSI.
+    loneliness_post = ifelse(group == "Treatment",
+                             loneliness_pre - rnorm(n, mean = 5, sd = 2),
+                             loneliness_pre + rnorm(n, mean = 0, sd = 2)),
+    social_anxiety_post = ifelse(group == "Treatment",
+                                 social_anxiety_pre - rnorm(n, mean = 4, sd = 1.5),
+                                 social_anxiety_pre + rnorm(n, mean = 0, sd = 1.5)),
+    POSI_post = ifelse(group == "Treatment",
+                       POSI_pre - rnorm(n, mean = 3, sd = 1),
+                       POSI_pre + rnorm(n, mean = 0, sd = 1)),
+    PIU_post = ifelse(group == "Treatment",
+                      PIU_pre - rnorm(n, mean = 6, sd = 2.5),
+                      PIU_pre + rnorm(n, mean = 0, sd = 2.5)),
+    # Follow-up scores: additional (smaller) changes in the same direction for the treatment group.
+    loneliness_follow = ifelse(group == "Treatment",
+                               loneliness_post - rnorm(n, mean = 2, sd = 1),
+                               loneliness_post + rnorm(n, mean = 0, sd = 1)),
+    social_anxiety_follow = ifelse(group == "Treatment",
+                                   social_anxiety_post - rnorm(n, mean = 2, sd = 1),
+                                   social_anxiety_post + rnorm(n, mean = 0, sd = 1)),
+    POSI_follow = ifelse(group == "Treatment",
+                         POSI_post - rnorm(n, mean = 1, sd = 0.5),
+                         POSI_post + rnorm(n, mean = 0, sd = 0.5)),
+    PIU_follow = ifelse(group == "Treatment",
+                        PIU_post - rnorm(n, mean = 3, sd = 1),
+                        PIU_post + rnorm(n, mean = 0, sd = 1))
+  )
+
+# --- DESCRIPTIVE STATISTICS ---
+# Summarize key demographics by group
+descriptives <- data %>%
+  group_by(group) %>%
+  summarise(
+    count = n(),
+    mean_age = mean(age),
+    sd_age = sd(age),
+    mean_academic_score = mean(academic_score),
+    sd_academic_score = sd(academic_score)
+  )
+print(descriptives)
+
+# --- ANCOVA ANALYSES ---
+# ANCOVA for post-test outcomes, controlling for baseline scores and demographics.
+# Example for loneliness:
+ancova_loneliness <- lm(loneliness_post ~ group + loneliness_pre + sex + age + grade + academic_score, data = data)
+summary(ancova_loneliness)
+
+# Repeat for social anxiety and PIU.
+ancova_social <- lm(social_anxiety_post ~ group + social_anxiety_pre + sex + age + grade + academic_score, data = data)
+summary(ancova_social)
+
+ancova_PIU <- lm(PIU_post ~ group + PIU_pre + sex + age + grade + academic_score, data = data)
+summary(ancova_PIU)
+
+# ANCOVA for follow-up outcomes (e.g., loneliness follow-up), adjusting for pre- and post-test scores.
+ancova_loneliness_follow <- lm(loneliness_follow ~ group + loneliness_pre + loneliness_post + sex + age + grade + academic_score, data = data)
+summary(ancova_loneliness_follow)
+
+# --- SEM MEDIATION ANALYSIS ---
+# Hypothesized model:
+# "Among adolescents with problematic internet use (PIU), those who received ICBT treatment will show a significant decrease in loneliness and social anxiety, 
+# and this emotional improvement will lead to a significant reduction in PIU, mediated by preference for online social interaction (POSI)."
+#
+# In this mediation model, we use follow-up scores (adjusted by ANCOVA) to test the indirect effects:
+#   - Loneliness and social anxiety influence POSI,
+#   - POSI in turn influences PIU.
+# We also include direct paths from loneliness and social anxiety to PIU.
+
+mediation_model <- '
+  # Paths from emotional measures to mediator (POSI)
+  POSI_follow ~ a1*loneliness_follow + a2*social_anxiety_follow
+
+  # Path from mediator to outcome (PIU)
+  PIU_follow ~ b*POSI_follow
+
+  # Direct effects on PIU
+  PIU_follow ~ c1*loneliness_follow + c2*social_anxiety_follow
+
+  # Indirect effects
+  indirect_loneliness := a1 * b
+  indirect_social := a2 * b
+
+  # Total effects
+  total_loneliness := c1 + (a1 * b)
+  total_social := c2 + (a2 * b)
+'
+
+fit <- sem(mediation_model, data = data)
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+# --- END OF SCRIPT ---

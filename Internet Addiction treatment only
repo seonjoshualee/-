@@ -1,0 +1,74 @@
+# --- SETUP ---
+set.seed(123)  # For reproducibility
+library(dplyr)
+library(lavaan)
+
+# Total sample size (Treatment group only)
+n <- 162  # Assuming half of 324 were treatment group
+
+# --- DATA SIMULATION ---
+# Create baseline demographic data
+data <- data.frame(
+  id = 1:n,
+  sex = sample(c("Male", "Female"), n, replace = TRUE),
+  age = sample(14:19, n, replace = TRUE),
+  grade = sample(9:12, n, replace = TRUE),
+  academic_score = rnorm(n, mean = 75, sd = 10)
+)
+
+# Simulate Pre-test (1회기)
+data <- data %>%
+  mutate(
+    loneliness_pre = rnorm(n, mean = 50, sd = 10),
+    social_anxiety_pre = rnorm(n, mean = 40, sd = 8),
+    POSI_pre = rnorm(n, mean = 30, sd = 5),
+    PIU_pre = rnorm(n, mean = 60, sd = 12)
+  )
+
+# Simulate Post-test (8회기 이후)
+data <- data %>%
+  mutate(
+    loneliness_post = loneliness_pre - rnorm(n, mean = 5, sd = 2),
+    social_anxiety_post = social_anxiety_pre - rnorm(n, mean = 4, sd = 1.5),
+    POSI_post = POSI_pre - rnorm(n, mean = 3, sd = 1),
+    PIU_post = PIU_pre - rnorm(n, mean = 6, sd = 2.5)
+  )
+
+# Simulate Follow-up (8회기 1달 후)
+data <- data %>%
+  mutate(
+    loneliness_follow = loneliness_post - rnorm(n, mean = 2, sd = 1),
+    social_anxiety_follow = social_anxiety_post - rnorm(n, mean = 2, sd = 1),
+    POSI_follow = POSI_post - rnorm(n, mean = 1, sd = 0.5),
+    PIU_follow = PIU_post - rnorm(n, mean = 3, sd = 1)
+  )
+
+# --- SEM MODEL ---
+sem_model <- '
+  # Time-based effects
+  loneliness_post ~ loneliness_pre
+  social_anxiety_post ~ social_anxiety_pre
+  POSI_post ~ POSI_pre
+  PIU_post ~ PIU_pre
+  
+  loneliness_follow ~ loneliness_post
+  social_anxiety_follow ~ social_anxiety_post
+  POSI_follow ~ POSI_post
+  PIU_follow ~ PIU_post
+  
+  # Mediation paths
+  POSI_post ~ a1 * loneliness_post + a2 * social_anxiety_post
+  PIU_post ~ b * POSI_post + c1 * loneliness_post + c2 * social_anxiety_post
+  
+  POSI_follow ~ a3 * loneliness_follow + a4 * social_anxiety_follow
+  PIU_follow ~ d * POSI_follow + e1 * loneliness_follow + e2 * social_anxiety_follow
+  
+  # Indirect effects
+  indirect_post_loneliness := a1 * b
+  indirect_post_social := a2 * b
+  indirect_follow_loneliness := a3 * d
+  indirect_follow_social := a4 * d
+'
+
+fit <- sem(sem_model, data = data)
+summary(fit, standardized = TRUE, fit.measures = TRUE)

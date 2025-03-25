@@ -1,0 +1,63 @@
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+library(ggpubr)
+library(MASS)
+
+# 데이터 준비 (예제 데이터)
+set.seed(123)
+data <- data.frame(
+  Age = rnorm(100, mean = 25, sd = 5),
+  SRS = rnorm(100, mean = 50, sd = 10),
+  DASS = rnorm(100, mean = 30, sd = 8),
+  FCS = rnorm(100, mean = 40, sd = 12),
+  Family_DASS = rnorm(100, mean = 20, sd = 6)
+)
+
+# 최적 군집 개수 확인 (Elbow & Silhouette Method)
+fviz_nbclust(data, kmeans, method = "wss") + ggtitle("Elbow Method")
+fviz_nbclust(data, kmeans, method = "silhouette") + ggtitle("Silhouette Method")
+
+# k-means 군집 분석 (k=3 가정)
+set.seed(123)
+kmeans_result <- kmeans(data, centers = 3, nstart = 25)
+data$Cluster <- as.factor(kmeans_result$cluster)
+
+# PCA 기반 군집 시각화
+pca_result <- prcomp(data[, -6], scale. = TRUE)  # 군집 컬럼 제외하고 PCA 수행
+pca_df <- data.frame(pca_result$x[, 1:2], Cluster = data$Cluster)
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 3, alpha = 0.8) +
+  theme_minimal() +
+  ggtitle("PCA 기반 군집 시각화")
+
+# 군집별 기술통계 요약 (평균 & 표준편차 포함)
+summary_stats <- data %>%
+  group_by(Cluster) %>%
+  summarise(
+    Mean_Age = mean(Age), SD_Age = sd(Age),
+    Mean_SRS = mean(SRS), SD_SRS = sd(SRS),
+    Mean_DASS = mean(DASS), SD_DASS = sd(DASS),
+    Mean_FCS = mean(FCS), SD_FCS = sd(FCS),
+    Mean_Family_DASS = mean(Family_DASS), SD_Family_DASS = sd(Family_DASS),
+    .groups = "drop"
+  )
+print(summary_stats)
+
+# 박스플롯 (이상치 강조)
+boxplot_list <- list(
+  ggplot(data, aes(x = Cluster, y = FCS, fill = Cluster)) +
+    geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 3) +
+    theme_minimal() + ggtitle("군집별 FCS 분포"),
+  
+  ggplot(data, aes(x = Cluster, y = Family_DASS, fill = Cluster)) +
+    geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 3) +
+    theme_minimal() + ggtitle("군집별 Family_DASS 분포")
+)
+ggarrange(plotlist = boxplot_list, ncol = 2, nrow = 1)
+
+# MANOVA (다변량 분산분석)
+manova_result <- manova(cbind(FCS, Family_DASS) ~ Cluster, data = data)
+summary(manova_result)
