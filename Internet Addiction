@@ -1,66 +1,101 @@
-# Load required libraries
+# Load required packages
 library(dplyr)
-library(psych)   # For descriptive statistics
-library(lavaan)  # For SEM analysis
+library(car)       # for Anova/ANCOVA
+library(lavaan)    # for SEM
 
-# 1. Set seed for reproducibility and simulate data for 324 students
+# --- Simulate Data ---
 set.seed(123)
 n <- 324
 data <- data.frame(
-  id = 1:n,
-  sex = sample(c("M", "F"), n, replace = TRUE),
+  # Random allocation to groups (treatment = 1, control = 0)
+  group = factor(sample(c("treatment", "control"), n, replace = TRUE)),
+  sex = factor(sample(c("M", "F"), n, replace = TRUE)),
   age = sample(14:19, n, replace = TRUE),
   grade = sample(9:12, n, replace = TRUE),
-  academic_scores = round(rnorm(n, mean = 75, sd = 10), 1)
+  academic_scores = rnorm(n, mean = 75, sd = 10),
+  # Pre-test measures (baseline scores)
+  loneliness_pre = rnorm(n, mean = 50, sd = 10),
+  social_anxiety_pre = rnorm(n, mean = 50, sd = 10),
+  POSI_pre = rnorm(n, mean = 50, sd = 10),
+  PIU_pre = rnorm(n, mean = 50, sd = 10)
 )
 
-# 2. Random allocation to treatment (1) and control (0) groups
-data$treatment <- sample(c(0, 1), n, replace = TRUE)
+# For illustration, simulate post-test scores so that treatment shows greater improvement:
+data <- data %>%
+  mutate(
+    # Treatment effect: lower post-test scores in treatment group (i.e., improvement)
+    loneliness_post = loneliness_pre - ifelse(group == "treatment", rnorm(n, 5, 2), rnorm(n, 1, 2)),
+    social_anxiety_post = social_anxiety_pre - ifelse(group == "treatment", rnorm(n, 5, 2), rnorm(n, 1, 2)),
+    POSI_post = POSI_pre - ifelse(group == "treatment", rnorm(n, 3, 1), rnorm(n, 0.5, 1)),
+    PIU_post = PIU_pre - ifelse(group == "treatment", rnorm(n, 4, 2), rnorm(n, 1, 2))
+  )
 
-# 3. Simulate pre-test scores (loneliness, social anxiety, POSI, PIU)
-data$loneliness_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
-data$social_anxiety_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
-data$POSI_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
-data$PIU_pre <- round(rnorm(n, mean = 50, sd = 10), 1)
+# Create change scores (improvement = pre minus post; higher values = more improvement)
+data <- data %>%
+  mutate(
+    loneliness_change = loneliness_pre - loneliness_post,
+    social_anxiety_change = social_anxiety_pre - social_anxiety_post,
+    POSI_change = POSI_pre - POSI_post,
+    PIU_change = PIU_pre - PIU_post
+  )
 
-# 4. Simulate post-test scores
-# For the treatment group, assume the ICBT treatment reduces the scores by an average effect.
-# For the control group, the scores remain similar (with some noise).
+# Create a numeric treatment variable: 1 = treatment, 0 = control
+data$group_num <- ifelse(data$group == "treatment", 1, 0)
 
-data$loneliness_post <- with(data, ifelse(treatment == 1,
-                                            loneliness_pre - rnorm(n, mean = 5, sd = 3),
-                                            loneliness_pre + rnorm(n, mean = 0, sd = 3)))
-data$social_anxiety_post <- with(data, ifelse(treatment == 1,
-                                              social_anxiety_pre - rnorm(n, mean = 5, sd = 3),
-                                              social_anxiety_pre + rnorm(n, mean = 0, sd = 3)))
-data$POSI_post <- with(data, ifelse(treatment == 1,
-                                    POSI_pre - rnorm(n, mean = 5, sd = 3),
-                                    POSI_pre + rnorm(n, mean = 0, sd = 3)))
-data$PIU_post <- with(data, ifelse(treatment == 1,
-                                   PIU_pre - rnorm(n, mean = 5, sd = 3),
-                                   PIU_pre + rnorm(n, mean = 0, sd = 3)))
-
-# 5. Descriptive statistics for the dataset
-desc_stats <- describe(data)
+# --- Descriptive Statistics ---
+desc_stats <- data %>%
+  group_by(group) %>%
+  summarize(
+    mean_age = mean(age),
+    sd_age = sd(age),
+    mean_academic = mean(academic_scores),
+    sd_academic = sd(academic_scores),
+    mean_loneliness_pre = mean(loneliness_pre),
+    mean_social_anxiety_pre = mean(social_anxiety_pre),
+    mean_POSI_pre = mean(POSI_pre),
+    mean_PIU_pre = mean(PIU_pre)
+  )
+print("Descriptive statistics by group:")
 print(desc_stats)
 
-# 6. ANCOVA: Compare post-test loneliness scores controlling for the pre-test score
-ancova_model <- aov(loneliness_post ~ treatment + loneliness_pre + sex + age + grade + academic_scores, data = data)
-summary(ancova_model)
+# --- ANCOVA Analyses ---
+# ANCOVA example for loneliness_post controlling for loneliness_pre and covariates:
+ancova_loneliness <- aov(loneliness_post ~ group + loneliness_pre + sex + age + grade + academic_scores, data = data)
+print("ANCOVA for loneliness_post:")
+print(summary(ancova_loneliness))
 
-# 7. SEM Mediation Analysis using lavaan
-# The model tests whether POSI mediates the effects of loneliness and social anxiety on PIU.
-# Paths: loneliness_post and social_anxiety_post predict POSI_post; POSI_post then predicts PIU_post.
-model <- '
-  # Direct effects on mediator
-  POSI_post ~ a1*loneliness_post + a2*social_anxiety_post
+# Similarly, you can run ANCOVA for social_anxiety_post, POSI_post, and PIU_post if desired.
+
+# --- SEM Mediation Analysis ---
+# Hypothesized SEM: 
+#   1. Treatment predicts emotional improvement (latent variable from loneliness_change and social_anxiety_change).
+#   2. Emotional improvement predicts POSI_change.
+#   3. POSI_change predicts PIU_change.
+#
+# This tests whether the effect of treatment on PIU reduction is mediated by improvements in emotion
+# (decreases in loneliness and social anxiety) that, in turn, lead to a reduction in POSI and thus PIU.
+sem_model <- '
+  # Latent variable for emotional improvement (higher change = greater improvement)
+  emotional_improvement =~ loneliness_change + social_anxiety_change
   
-  # Direct effects on outcome
-  PIU_post ~ b*POSI_post + c1*loneliness_post + c2*social_anxiety_post
+  # Structural regressions
+  emotional_improvement ~ a*group_num
+  POSI_change ~ b*emotional_improvement
+  PIU_change ~ c*POSI_change + d*group_num
   
-  # Indirect effects (mediation effects)
-  indirect_loneliness := a1 * b
-  indirect_social_anxiety := a2 * b
+  # Indirect (mediated) effect of treatment on PIU_change via emotional_improvement and POSI_change
+  indirect := a * b * c
+  
+  # Total effect includes the direct effect of treatment and the indirect effect
+  total := d + (a * b * c)
 '
-fit <- sem(model, data = data)
-summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+fit_sem <- sem(sem_model, data = data, se = "bootstrap", bootstrap = 1000)
+summary(fit_sem, fit.measures = TRUE, standardized = TRUE)
+
+# The output will show parameter estimates for each path.
+# In particular, check that:
+# - The path 'a' (group -> emotional_improvement) is significant (indicating that ICBT treatment leads to emotional improvement),
+# - The path 'b' (emotional_improvement -> POSI_change) is significant,
+# - The path 'c' (POSI_change -> PIU_change) is significant,
+# - And the computed 'indirect' effect is significant.
