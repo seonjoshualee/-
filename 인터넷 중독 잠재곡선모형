@@ -1,0 +1,42 @@
+model <- '
+  # 외로움(X1)의 잠재변화: Pre → Post → Follow-up
+  X1 =~ 1*X1_pre + 1*X1_post + 1*X1_fu
+  X1_post ~ X1_pre
+  X1_fu ~ X1_post
+
+  # 사회불안(X2)의 잠재변화: Pre → Post → Follow-up
+  X2 =~ 1*X2_pre + 1*X2_post + 1*X2_fu
+  X2_post ~ X2_pre
+  X2_fu ~ X2_post
+
+  # POSI(M)의 잠재변화: Pre → Post
+  M =~ 1*M_pre + 1*M_post
+  M_post ~ M_pre
+
+  # PIU(Y)의 잠재변화: Pre → Post → Follow-up
+  Y =~ 1*Y_pre + 1*Y_post + 1*Y_fu
+  Y_post ~ Y_pre
+  Y_fu ~ Y_post
+
+  # 매개모델: 외로움(X1)과 사회불안(X2)의 변화가 POSI(M) 변화에 미치는 영향
+  M ~ a1*X1 + a2*X2 + b_gender*gender + b_age*age + b_grade*grade
+
+  # 결과모델: POSI(M) 변화가 PIU(Y) 변화에 미치는 영향
+  Y ~ b1*M + c1*X1 + c2*X2 + d_gender*gender + d_age*age + d_grade*grade
+
+  # 간접효과 계산
+  indirect_X1 := a1 * b1
+  indirect_X2 := a2 * b1
+'
+
+# 모형 적합 (최대우도법, MLR 사용)
+fit <- sem(model, data = dat, estimator = "MLR")
+
+# 결과 요약 (표준화 추정치, 적합도 지수 포함)
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+# 시각화: 경로도 그리기
+semPlot(fit, what = "std", edge.label.cex = 1.2, node.label.cex = 1.2, sizeMan = 10, sizeLat = 10)
+
+# 추가 시각화 옵션: 적합도 지수와 모델 경로를 결합한 플롯
+semPaths(fit, whatLabels = "est", layout = "spring", edge.label.cex = 1.2, node.label.cex = 1.2, sizeLat = 10, sizeMan = 10, title = FALSE)
