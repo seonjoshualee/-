@@ -69,6 +69,5 @@ sem_model <- '
   indirect_follow_loneliness := a3 * d
   indirect_follow_social := a4 * d
 '
-
-fit <- sem(sem_model, data = data)
+fit <- sem(sem_model, data = data, se = "bootstrap", bootstrap = 5000)
 summary(fit, standardized = TRUE, fit.measures = TRUE)
